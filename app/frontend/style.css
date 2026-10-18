@@ -33,13 +33,13 @@ h1 { margin-bottom: 0; }
   padding: 0.75rem 1rem;
   border-radius: 0.75rem;
   max-width: 85%;
-  white-space: pre-wrap;
 }
 
 .msg.user {
   align-self: flex-end;
   background: #2563eb;
   color: white;
+  white-space: pre-wrap;
 }
 
 .msg.assistant {
@@ -47,10 +47,31 @@ h1 { margin-bottom: 0; }
   background: #1e293b;
 }
 
+.msg.assistant p { margin: 0 0 0.5rem; }
+.msg.assistant p:last-child { margin-bottom: 0; }
+.msg.assistant ul, .msg.assistant ol { margin: 0.25rem 0 0.5rem; padding-left: 1.25rem; }
+.msg.assistant li { margin-bottom: 0.25rem; }
+
 .sources {
   margin-top: 0.5rem;
   font-size: 0.8rem;
   color: #94a3b8;
+}
+
+.image-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.image-gallery img {
+  max-width: 140px;
+  max-height: 140px;
+  object-fit: contain;
+  border-radius: 0.5rem;
+  background: #0f172a;
+  border: 1px solid #334155;
 }
 
 #ask-form {

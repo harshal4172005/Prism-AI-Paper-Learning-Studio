@@ -11,6 +11,11 @@ function addMessage(role, text) {
   return div;
 }
 
+function renderMarkdown(el, text) {
+  el.innerHTML = marked.parse(text);
+  chat.scrollTop = chat.scrollHeight;
+}
+
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   const question = input.value.trim();
@@ -28,12 +33,26 @@ form.addEventListener("submit", async (e) => {
     });
     if (!res.ok) throw new Error(`Request failed: ${res.status}`);
     const data = await res.json();
-    pending.textContent = data.answer;
+    renderMarkdown(pending, data.answer);
     if (data.sources?.length) {
+      const pages = [...new Set(data.sources.map(s => s.page_number))];
       const sourceLine = document.createElement("div");
       sourceLine.className = "sources";
-      sourceLine.textContent = "Pages: " + data.sources.map(s => s.page_number).join(", ");
+      sourceLine.textContent = "Pages: " + pages.join(", ");
       pending.appendChild(sourceLine);
+
+      const imageUrls = [...new Set(data.sources.flatMap(s => s.image_urls))];
+      if (imageUrls.length) {
+        const gallery = document.createElement("div");
+        gallery.className = "image-gallery";
+        for (const url of imageUrls) {
+          const img = document.createElement("img");
+          img.src = url;
+          img.loading = "lazy";
+          gallery.appendChild(img);
+        }
+        pending.appendChild(gallery);
+      }
     }
   } catch (err) {
     pending.textContent = "Error: " + err.message;

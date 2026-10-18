@@ -2,19 +2,20 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Appliance Repair Assistant</title>
+<title>AI/ML Research Assistant</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <main>
-    <h1>Appliance Repair Assistant</h1>
-    <p class="subtitle">Ask a question about your appliance manual.</p>
+    <h1>AI/ML Research Assistant</h1>
+    <p class="subtitle">Ask a question about the ingested AI/ML papers.</p>
     <div id="chat"></div>
     <form id="ask-form">
-      <input id="question" type="text" placeholder="e.g. why is my washing machine leaking?" autocomplete="off" required>
+      <input id="question" type="text" placeholder="e.g. how does multi-head attention work?" autocomplete="off" required>
       <button type="submit">Ask</button>
     </form>
   </main>
+  <script src="https://cdn.jsdelivr.net/npm/marked@13.0.3/marked.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
