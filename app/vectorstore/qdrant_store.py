@@ -20,8 +20,8 @@ class ManualVectorStore:
             )
 
     def upsert_chunk(self, vector: list[float], text: str, source_file: str,
-                      page_number: int, image_paths: list[str]) -> str:
-        point_id = str(uuid.uuid4())
+                      page_number: int, image_paths: list[str], kind: str = "text") -> str:
+        point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{source_file}:{page_number}:{kind}:{text}"))
         self.client.upsert(
             collection_name=QDRANT_COLLECTION,
             points=[PointStruct(
@@ -29,6 +29,8 @@ class ManualVectorStore:
                 vector=vector,
                 payload={
                     "text": text,
+                    "kind": kind,
+                    "page_base": 1,
                     "source_file": source_file,
                     "page_number": page_number,
                     "image_paths": image_paths,

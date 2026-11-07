@@ -7,3 +7,11 @@ qdrant_storage/
 data/
 *.egg-info/
 .pytest_cache/
+work/
+outputs/
+*.key
+*.pem
+*.tgz
+*.tar.gz
+.env.*
+!.env.example

@@ -3,12 +3,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "ai_research_papers")
 
 EMBEDDING_MODEL = "models/gemini-embedding-001"
-GENERATION_MODELS = ["gemini-3.6-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite"]
+GENERATION_MODELS = [m.strip() for m in os.getenv("GENERATION_MODELS", "gemini-2.5-flash").split(",") if m.strip()]
 EMBEDDING_DIM = 768
 
 # Text-only fallbacks used after every Gemini model is exhausted/rate-limited. Optional.

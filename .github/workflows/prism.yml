@@ -1,0 +1,137 @@
+name: Prism CI and deployment
+
+on:
+  push:
+    branches: ['**']
+    paths: ['app/**', 'deploy/**', 'tests/**', 'requirements*.txt', '.github/**', '.gitattributes']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prism-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Python ${{ matrix.python }} and frontend checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12']
+    env:
+      GEMINI_API_KEY: ''
+      GROQ_API_KEY: ''
+      NVIDIA_API_KEY: ''
+      PRISM_COOKIE_SECURE: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: |
+            deploy/requirements-server.lock
+            requirements-dev.txt
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Check tracked source for credentials and runtime files
+        run: python deploy/check_source.py
+      - name: Run Python regression and deployment safety tests
+        run: python -m unittest discover -s tests -v
+      - name: Verify numerical experiments
+        run: node tests/test_experiment.cjs
+      - name: Check frontend JavaScript syntax
+        run: |
+          for file in app/frontend/*.js; do node --check "$file"; done
+      - name: Check Python and shell syntax
+        run: |
+          python -m compileall -q app deploy
+          bash -n deploy/bootstrap.sh
+          git diff --exit-code
+
+  build:
+    name: Build verified source artifact
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      digest: ${{ steps.bundle.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Package deterministic release
+        id: bundle
+        env:
+          COMMIT: ${{ github.sha }}
+        run: |
+          digest=$(python deploy/package.py prism-release.tgz --commit "$COMMIT")
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: prism-${{ github.sha }}
+          path: prism-release.tgz
+          retention-days: 7
+          if-no-files-found: error
+          overwrite: true
+
+  deploy:
+    name: Deploy isolated Prism service
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [test, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: prism-production
+      url: ${{ vars.PRISM_URL }}
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: prism-${{ github.sha }}
+          path: release
+      - name: Deploy checksummed artifact using restricted SSH key
+        env:
+          PRIVATE_KEY: ${{ secrets.PRISM_SSH_PRIVATE_KEY }}
+          KNOWN_HOSTS: ${{ secrets.PRISM_SSH_KNOWN_HOSTS }}
+          PRISM_HOST: ${{ vars.PRISM_HOST }}
+          PRISM_DEPLOY_USER: ${{ vars.PRISM_DEPLOY_USER }}
+          COMMIT: ${{ github.sha }}
+          DIGEST: ${{ needs.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          [[ "$PRISM_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.-]+$ ]]
+          [[ "$PRISM_DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          echo "$DIGEST  release/prism-release.tgz" | sha256sum --check
+          key_dir=$(mktemp -d)
+          trap 'rm -rf -- "$key_dir"' EXIT
+          printf '%s\n' "$PRIVATE_KEY" > "$key_dir/key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$key_dir/known_hosts"
+          chmod 600 "$key_dir/key" "$key_dir/known_hosts"
+          ssh -T -i "$key_dir/key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$key_dir/known_hosts" \
+            "$PRISM_DEPLOY_USER@$PRISM_HOST" "deploy $COMMIT $DIGEST" < release/prism-release.tgz
+      - name: Verify public HTTPS and exact deployed commit
+        env:
+          URL: ${{ vars.PRISM_URL }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 "$URL/api/health" > health.json
+          python -c 'import json,os; h=json.load(open("health.json")); assert h["status"]=="ok" and h["release"]==os.environ["COMMIT"], h; print("Public HTTPS serves tested commit:",h["release"])'

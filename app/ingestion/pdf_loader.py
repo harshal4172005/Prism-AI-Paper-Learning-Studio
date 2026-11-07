@@ -5,6 +5,7 @@ vector-drawn diagrams (architecture diagrams, flowcharts, plots) — common in
 academic papers and invisible to PyMuPDF's raster image extraction. For a page
 with vector drawings but no raster images, the whole page is rasterized instead.
 """
+import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -27,6 +28,7 @@ def load_pdf(pdf_path: str, image_output_dir: str) -> list[PageContent]:
     out_dir = Path(image_output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    document_id = hashlib.sha256(Path(pdf_path).read_bytes()).hexdigest()[:16]
     pages = []
     for page_index, page in enumerate(doc):
         text = page.get_text().strip()
@@ -34,16 +36,16 @@ def load_pdf(pdf_path: str, image_output_dir: str) -> list[PageContent]:
         for img_index, img in enumerate(page.get_images(full=True)):
             xref = img[0]
             base_image = doc.extract_image(xref)
-            image_path = out_dir / f"page{page_index}_img{img_index}.{base_image['ext']}"
+            image_path = out_dir / f"{document_id}_page{page_index}_img{img_index}.{base_image['ext']}"
             image_path.write_bytes(base_image["image"])
             image_paths.append(str(image_path))
 
         if not image_paths and len(page.get_drawings()) >= MIN_DRAWINGS_FOR_PAGE_RENDER:
-            image_path = out_dir / f"page{page_index}_vector.png"
+            image_path = out_dir / f"{document_id}_page{page_index}_vector.png"
             page.get_pixmap(dpi=150).save(str(image_path))
             image_paths.append(str(image_path))
 
-        pages.append(PageContent(page_number=page_index, text=text, image_paths=image_paths))
+        pages.append(PageContent(page_number=page_index + 1, text=text, image_paths=image_paths))
 
     doc.close()
     return pages

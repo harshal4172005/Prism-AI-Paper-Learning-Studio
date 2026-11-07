@@ -19,6 +19,7 @@ def _embed_with_retry(text: str, task_type: str, sleep=time.sleep) -> list[float
                 content=text,
                 task_type=task_type,
                 output_dimensionality=EMBEDDING_DIM,
+                request_options={"timeout": 30},
             )
             return result["embedding"]
         except ResourceExhausted:

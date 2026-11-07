@@ -1,0 +1,35 @@
+[Unit]
+Description=Prism private paper learning studio
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=prism-learning
+Group=prism-learning
+WorkingDirectory=/opt/prism-learning
+EnvironmentFile=/etc/prism-learning.env
+ExecStart=/opt/prism-learning/venv/bin/python -m uvicorn app.api.main:app --host 127.0.0.1 --port 8176 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-access-log
+Restart=on-failure
+RestartSec=5
+MemoryHigh=384M
+MemoryMax=512M
+CPUQuota=100%
+TasksMax=64
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/prism-learning
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=100
+
+[Install]
+WantedBy=multi-user.target

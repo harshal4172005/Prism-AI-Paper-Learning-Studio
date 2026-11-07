@@ -39,6 +39,7 @@ def ingest_manual(pdf_path: str):
                 source_file=pdf_path,
                 page_number=page.page_number,
                 image_paths=[image_path],
+                kind="figure_caption",
             )
             image_count += 1
 
