@@ -15,4 +15,4 @@ EMBEDDING_DIM = 768
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = "llama-3.3-70b-versatile"
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY")
-NVIDIA_MODEL = "meta/llama-3.1-70b-instruct"
+NVIDIA_MODEL = os.getenv("NVIDIA_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")

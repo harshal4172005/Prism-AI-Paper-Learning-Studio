@@ -53,9 +53,12 @@ def _gemini_call(model_name, prompt, images):
 
 
 def _openai_compatible_call(base_url, api_key, model, prompt):
-    body = json.dumps({"model": model, "messages": [{"role": "user", "content": prompt}]}).encode()
+    payload = {"model": model, "messages": [{"role": "user", "content": prompt}], "max_tokens":4096}
+    if "nvidia.com" in base_url and "nemotron-3" in model:
+        payload["chat_template_kwargs"] = {"enable_thinking":False}
+    body = json.dumps(payload).encode()
     request = urllib.request.Request(f"{base_url}/chat/completions", data=body,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"})
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "User-Agent":"Prism/1.0"})
     with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
         data = json.load(response)
     record("groq" if "groq.com" in base_url else "nvidia", model, data.get("usage"))
