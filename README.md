@@ -52,7 +52,7 @@ For tests install `httpx`, then run:
 node tests/test_experiment.cjs
 ```
 
-29 Python checks cover authentication, recovery, session revocation, cross-account denial, history persistence, follow-up context, multi-paper snapshots, duplicate requests, shared-file cleanup, quotas, exports and prior ingestion/audit behavior. Numerical checks cover all five lessons. These checks establish functional behavior, not educational or factual-accuracy improvement.
+29 core Python checks cover authentication, recovery, session revocation, cross-account denial, history persistence, follow-up context, multi-paper snapshots, duplicate requests, shared-file cleanup, quotas, exports and prior ingestion/audit behavior. Numerical checks cover all five lessons. These checks establish functional behavior, not educational or factual-accuracy improvement.
 
 The tested ARM server dependency versions are recorded in `deploy/requirements-server.lock`. See `deploy/OPERATIONS.md` for isolated deployment details.
 
@@ -66,4 +66,4 @@ Security references: [OWASP password storage](https://cheatsheetseries.owasp.org
 
 ## CI/CD
 
-GitHub Actions tests Python 3.11/3.12, numerical lessons, deployment safety and source hygiene. Successful main-branch changes deploy a checksummed artifact to the isolated Oracle service with commit-specific health checks and automatic code rollback on startup failure. See `deploy/CI-CD.md` for access boundaries, retention, database snapshot behavior and operating instructions.
+GitHub Actions runs 38 Python checks (29 application checks plus nine release/deployment checks) on Python 3.11 and 3.12, numerical lessons, syntax checks and source hygiene. Successful main-branch changes deploy a checksummed artifact to the isolated Oracle service with commit-specific health checks and automatic code rollback on startup failure. See `deploy/CI-CD.md` for access boundaries, retention, database snapshot behavior and operating instructions.
