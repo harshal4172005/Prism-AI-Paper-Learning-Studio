@@ -33,9 +33,12 @@ def record(provider, model, metadata):
                    (*owner, incoming, outgoing, total, cost, provider, model))
 
 
-def totals(db, user_id, chat_id=None):
+def totals(db, user_id, chat_id=None, provider=None):
     clause = "user_id=?" + (" AND chat_id=?" if chat_id else "")
     args = (user_id, chat_id) if chat_id else (user_id,)
+    if provider:
+        clause += " AND provider=?"
+        args += (provider,)
     row = db.execute("SELECT count(*) AS calls,coalesce(sum(input_points),0) AS input_points,coalesce(sum(output_points),0) AS output_points,coalesce(sum(total_points),0) AS vibe_points,coalesce(sum(estimated_usd),0) AS estimated_usd,sum(CASE WHEN estimated_usd IS NULL THEN 1 ELSE 0 END) AS unpriced_calls FROM ai_usage WHERE "+clause,args).fetchone()
     return dict(row)
 
@@ -50,6 +53,16 @@ def snapshot(user_id, chat_id=None):
         used = min(limit,row[0] if row else 0)
         result = {"questions":{"used":used,"limit":limit,"remaining":max(0,limit-used),"reset_at":reset.isoformat()},
                   "ai":totals(db,user_id)}
+        from app import config
+        settings=[("gemini","Gemini","Primary",", ".join(config.GENERATION_MODELS),config.GEMINI_API_KEY),
+                  ("groq","Groq","Backup 1",config.GROQ_MODEL,config.GROQ_API_KEY),
+                  ("nvidia","NVIDIA","Backup 2",config.NVIDIA_MODEL,config.NVIDIA_API_KEY)]
+        result["provider_usage"]=[]
+        for name,label,role,model,key in settings:
+            item={"provider":name,"label":label,"role":role,"model":model,"configured":bool(key),"ai":totals(db,user_id,provider=name)}
+            if chat_id:
+                item["chat_ai"]=totals(db,user_id,chat_id,provider=name)
+            result["provider_usage"].append(item)
         if chat_id:
             result["chat_ai"] = totals(db,user_id,chat_id)
     return result

@@ -33,8 +33,16 @@ function renderUsage(data){
   $("usage-documents").textContent=`${usageInfo.documents||0} / ${limits.documents} papers in your library`;
   $("usage-ai").textContent=`${number(a.vibe_points)} total · ${number(a.input_points)} input / ${number(a.output_points)} output & thinking`;
   const chat=usageInfo.chat_ai;
-  $("usage-chat").textContent=currentChat&&chat?`This chat: ${number(chat.vibe_points)} Vibe Points · ${chat.calls?"$"+Number(chat.estimated_usd).toFixed(5)+" estimated for priced calls":"no measured calls yet"}`:"Open a conversation to see its usage.";
-  $("usage-cost").textContent=a.calls?`Estimated AI cost: $${Number(a.estimated_usd).toFixed(5)} USD${a.unpriced_calls?` · ${a.unpriced_calls} calls unpriced`:""}`:"Estimated AI cost: no measured calls yet.";
+  const cost=item=>!item.calls?"No measured calls yet":item.unpriced_calls===item.calls?"Cost unavailable · provider pricing not configured":`$${Number(item.estimated_usd).toFixed(5)} USD estimated${item.unpriced_calls?` · ${item.unpriced_calls} calls unpriced`:""}`;
+  $("usage-chat").textContent=currentChat&&chat?`This chat: ${number(chat.vibe_points)} Vibe Points · ${cost(chat)}`:"Open a conversation to see its usage.";
+  $("usage-cost").textContent="AI cost: "+cost(a);
+  const providers=$("usage-providers");providers.replaceChildren();
+  for(const provider of usageInfo.provider_usage||[]){
+    const card=el("section",undefined,"provider-usage"),stats=provider.ai;
+    card.append(el("strong",provider.label+" · "+provider.role),el("p",provider.model,"file-note"),el("p",`${number(stats.vibe_points)} Vibe Points · ${stats.calls} measured calls`),el("p",`${number(stats.input_points)} input / ${number(stats.output_points)} output & thinking`,"file-note"));
+    if(currentChat&&provider.chat_ai)card.append(el("p",`This chat: ${number(provider.chat_ai.vibe_points)} Vibe Points`,"file-note"));
+    card.append(el("p",provider.configured?cost(stats):"Not configured","file-note"));providers.append(card);
+  }
 }
 async function refreshUsage(){
   if(!userInfo)return;

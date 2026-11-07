@@ -24,19 +24,19 @@
   const $=id=>document.getElementById(id),dimensions=[4,16,64,128,256,512];let latest;
   function chart(id,weights) {
     const root=$(id);root.replaceChildren();
-    weights.forEach((weight,index)=>{const bar=document.createElement("div");bar.className="bar";bar.style.height=(weight*100)+"%";bar.title="Key "+(index+1)+": "+(weight*100).toFixed(2)+"%";
+    weights.forEach((weight,index)=>{const bar=document.createElement("div");bar.className="bar";bar.style.height=(weight*100)+"%";bar.title="Item "+(index+1)+": "+(weight*100).toFixed(2)+"%";
       const label=document.createElement("span");label.textContent=String(index+1);bar.append(label);root.append(bar);});
-    root.setAttribute("aria-label",weights.map((weight,index)=>"Key "+(index+1)+": "+(weight*100).toFixed(1)+" percent").join(", "));
+    root.setAttribute("aria-label",weights.map((weight,index)=>"Item "+(index+1)+": "+(weight*100).toFixed(1)+" percent").join(", "));
   }
   function update() {
     const dimension=dimensions[Number($("dimension").value)],seed=Math.max(1,Math.min(999999,Math.trunc(Number($("seed").value)||42)));
     $("seed").value=seed;$("dimension-value").textContent=dimension;latest=simulate(dimension,seed);
     chart("raw-chart",latest.raw);chart("scaled-chart",latest.scaled);
     const rawPeak=Math.max(...latest.raw)*100,scaledPeak=Math.max(...latest.scaled)*100;
-    $("raw-peak").textContent="Peak "+rawPeak.toFixed(1)+"%";$("scaled-peak").textContent="Peak "+scaledPeak.toFixed(1)+"%";
-    $("raw-entropy").textContent="Spread (normalized entropy): "+latest.raw_entropy.toFixed(3);
-    $("scaled-entropy").textContent="Spread (normalized entropy): "+latest.scaled_entropy.toFixed(3);
-    $("lab-result").textContent="In this sample, the strongest key receives "+rawPeak.toFixed(1)+"% of the attention without scaling and "+scaledPeak.toFixed(1)+"% with scaling. Dividing by √"+dimension+" makes the distribution less concentrated. Try another seed to see how the example varies.";
+    $("raw-peak").textContent="Most focus: "+rawPeak.toFixed(1)+"%";$("scaled-peak").textContent="Most focus: "+scaledPeak.toFixed(1)+"%";
+    $("raw-entropy").textContent="Focus spread: "+Math.round(latest.raw_entropy*100)+" / 100 (higher means more evenly shared)";
+    $("scaled-entropy").textContent="Focus spread: "+Math.round(latest.scaled_entropy*100)+" / 100 (higher means more evenly shared)";
+    $("lab-result").textContent="Before the adjustment, one item gets "+rawPeak.toFixed(1)+"% of the focus. After it, the largest share is "+scaledPeak.toFixed(1)+"%. The adjustment spreads the focus more evenly in this example. Click ‘Try a new example’ to explore another set of numbers. This illustrates the idea; it does not test a trained AI.";
   }
   $("dimension").addEventListener("input",update);$("seed").addEventListener("change",update);
   $("resample").addEventListener("click",()=>{$("seed").value=(Number($("seed").value)%999999)+1;update();});

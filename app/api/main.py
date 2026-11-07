@@ -10,6 +10,8 @@ from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 from fastapi import FastAPI, Request, Response, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import Literal
@@ -28,22 +30,47 @@ async def lifespan(app):
     yield
 
 
-app=FastAPI(title="Prism Paper Learning Studio",version="1.0.0",lifespan=lifespan)
+app=FastAPI(title="Prism Paper Learning Studio",version="1.0.0",lifespan=lifespan,docs_url=None,redoc_url=None,openapi_url=None)
 user_dependency=Depends(accounts.current_user)
+
+
+@app.exception_handler(RequestValidationError)
+async def invalid_input(request,exc):
+    # Pydantic's default errors echo raw input, potentially including passwords/keys.
+    return JSONResponse(status_code=422,content={"detail":"Please check the fields and try again."})
 
 
 @app.middleware("http")
 async def security_headers(request,call_next):
     if request.method in ("POST","PATCH","PUT","DELETE"):
+        if request.headers.get("sec-fetch-site")=="cross-site":
+            return PlainTextResponse("Request origin is not allowed.",status_code=403)
         origin=request.headers.get("origin")
         allowed=os.getenv("PRISM_PUBLIC_ORIGIN","")
         if origin and not ((allowed and origin.rstrip("/")==allowed.rstrip("/")) or
-            (not allowed and urlsplit(origin).netloc==request.headers.get("host"))):
+            (not allowed and urlsplit(origin).netloc==request.headers.get("host") and urlsplit(origin).scheme==request.url.scheme)):
             return PlainTextResponse("Request origin is not allowed.",status_code=403)
+        maximum=library.MAX_BYTES if request.url.path=="/api/documents" else 65536
+        length=request.headers.get("content-length")
+        if length:
+            try:
+                if int(length)<0:raise ValueError()
+                if int(length)>maximum:return PlainTextResponse("Request is too large.",status_code=413)
+            except ValueError:
+                return PlainTextResponse("Invalid request length.",status_code=400)
+        if request.url.path!="/api/documents":
+            size=0;parts=[]
+            async for part in request.stream():
+                size+=len(part)
+                if size>maximum:return PlainTextResponse("Request is too large.",status_code=413)
+                parts.append(part)
+            # Cache the bounded body for Starlette's downstream request replay.
+            request._body=b"".join(parts)
     response=await call_next(request)
     response.headers["X-Content-Type-Options"]="nosniff"
     response.headers["Referrer-Policy"]="same-origin"
     response.headers["X-Frame-Options"]="SAMEORIGIN"
+    response.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=()"
     response.headers["Content-Security-Policy"]="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' blob: data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
     if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"]="no-store"
@@ -386,6 +413,7 @@ class DeleteAccount(BaseModel):
 
 @app.delete("/api/account")
 def delete_account(body: DeleteAccount,response: Response,user=user_dependency):
+    accounts.rate_limit("delete-account:"+user["id"],10,900)
     with library.connect() as db:
         row=db.execute("SELECT password FROM users WHERE id=?",(user["id"],)).fetchone()
     if not row or not accounts.verify_password(body.password,row["password"]):

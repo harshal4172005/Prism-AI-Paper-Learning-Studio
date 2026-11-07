@@ -7,7 +7,9 @@ root=Path(__file__).resolve().parents[1]
 files=subprocess.check_output(["git","ls-files","-z"],cwd=root).decode().split("\0")
 patterns=[re.compile(r"-----BEGIN (?:OPENSSH|RSA|EC|DSA)? ?PRIVATE KEY-----"),
     re.compile(r"AIza[0-9A-Za-z_-]{35}"),re.compile(r"\bgh[pousr]_[A-Za-z0-9]{30,}\b"),
-    re.compile(r"github_pat_[A-Za-z0-9_]{50,}")]
+    re.compile(r"github_pat_[A-Za-z0-9_]{50,}"),
+    re.compile(r"\bgsk_[A-Za-z0-9]{30,}"),re.compile(r"\bnvapi-[A-Za-z0-9_-]{30,}"),
+    re.compile(r"\bbak-[A-Za-z0-9_-]{20,}")]
 problems=[]
 for name in filter(None,files):
     path=root/name

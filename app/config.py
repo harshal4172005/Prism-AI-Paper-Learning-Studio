@@ -13,6 +13,6 @@ EMBEDDING_DIM = 768
 
 # Text-only fallbacks used after every Gemini model is exhausted/rate-limited. Optional.
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY")
 NVIDIA_MODEL = os.getenv("NVIDIA_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
