@@ -33,16 +33,9 @@ function initMobile(){
   window.addEventListener("resize",fitViewport);fitViewport();
   document.getElementById("mobile-menu").addEventListener("click",openWorkspace);
   for(const id of ["mobile-close","mobile-backdrop","mobile-done"])document.getElementById(id).addEventListener("click",()=>closeWorkspace());
-  function arrangeLearning(){
-    closeWorkspace(false);
-    const home=document.getElementById("learning-home"),dialog=document.getElementById("learning-dialog");
-    if(dialog.open)dialog.close();
-    const target=mobileWidth.matches?document.getElementById("learning-content"):home;
-    for(const id of ["attention-lab","more-labs"])target.append(document.getElementById(id));
-  }
   document.getElementById("mobile-new-chat").addEventListener("click",()=>{newConversation();document.getElementById("close-reader").click();});
   document.getElementById("mobile-learning").addEventListener("click",()=>{closeWorkspace();document.getElementById("learning-dialog").showModal();});
-  mobileWidth.addEventListener("change",arrangeLearning);
+  mobileWidth.addEventListener("change",()=>{closeWorkspace(false);syncChatLayout();});
   document.addEventListener("keydown",event=>{
     if(!document.body.classList.contains("workspace-open")||document.querySelector("dialog[open]"))return;
     if(event.key==="Escape"){event.preventDefault();closeWorkspace();}
@@ -53,5 +46,15 @@ function initMobile(){
       else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}
     }
   });
-  arrangeLearning();
+  syncChatLayout();
+}
+
+function syncChatLayout(){
+  const conversation=messages.length>0;
+  document.body.classList.toggle("has-conversation",conversation);
+  const dialog=document.getElementById("learning-dialog"),target=document.getElementById(mobileWidth.matches||conversation?"learning-content":"learning-home");
+  if(document.getElementById("attention-lab").parentElement!==target){
+    if(dialog.open)dialog.close();
+    for(const id of ["attention-lab","more-labs"])target.append(document.getElementById(id));
+  }
 }

@@ -295,3 +295,28 @@ dialog#recovery-dialog {
 
 @media(max-width:900px){.header-controls{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px}.header-controls select{width:100%;max-width:none;min-width:0}.header-controls button{font-size:11px;white-space:nowrap}.header-controls #export-chat:disabled{display:none}}
 .sidebar-bottom>.mobile-only{display:none}@media(max-width:900px){.sidebar-bottom>#mobile-learning{display:block}}
+
+/* One scrollable conversation on every screen; replies stay beside their question. */
+.chat-turn { display:flow-root; }
+.chat-scroll { overflow-anchor:none; }
+.conversation-column { position:relative; }
+.chat-jump-slot { position:relative; height:0; flex-shrink:0; z-index:4; }
+#latest-reply { position:absolute; bottom:12px; right:12px; min-height:40px; padding:9px 15px; border:1px solid #b9c9ac; border-radius:24px; background:var(--paper); color:var(--green); font-size:12px; box-shadow:0 3px 12px #243c3320; }
+body.has-conversation .sidebar-bottom>#mobile-learning { display:block; }
+@media(min-width:901px) {
+  body.has-conversation { height:var(--app-height,100dvh); overflow:hidden; }
+  body.has-conversation main { display:flex; flex-direction:column; height:var(--app-height,100dvh); min-height:0; }
+  body.has-conversation main>header { flex-shrink:0; }
+  body.has-conversation .reader-layout { display:flex; flex-direction:column; flex:1; min-height:0; }
+  body.has-conversation .reader-layout.reading { display:grid; grid-template-rows:minmax(0,1fr); }
+  body.has-conversation .conversation-column { display:flex; flex-direction:column; flex:1; min-height:0; }
+  body.has-conversation .chat-scroll { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; padding:0 8px 16px 1px; }
+  body.has-conversation .composer { margin-top:0; flex-shrink:0; }
+  body.has-conversation #status { flex-shrink:0; min-height:18px; max-height:36px; margin:7px 0 12px; overflow:auto; }
+  body.has-conversation #learning-home,body.has-conversation main>footer { display:none; }
+  body.has-conversation #reader { position:relative; top:0; height:100%; margin-top:0; min-height:0; }
+}
+@media(min-width:901px) and (max-width:1100px) {
+  body.has-conversation .reader-layout.reading { display:flex; }
+  body.has-conversation #reader { position:fixed; inset:100px 24px 20px 239px; height:auto; z-index:45; }
+}

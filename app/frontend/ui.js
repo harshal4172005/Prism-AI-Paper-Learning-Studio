@@ -2,7 +2,28 @@ function prose(text){const paragraph=el("p",undefined,"prose");for(const part of
 function makeSource(source){const box=el("div",undefined,"excerpt"),link=el("button",source.document+" · location "+source.page+(source.kind==="ocr"?" · OCR text":"")+" ↗","source-link");link.addEventListener("click",()=>openReader(source.document_id,source.page));box.append(link,document.createTextNode(source.text));return box;}
 function showImage(url,caption){$("large-image").src=url;$("image-caption").textContent=caption;$("image-dialog").showModal();}
 function answerText(data){return[data.answer.title,data.answer.introduction,...data.answer.sections.flatMap(section=>[section.heading,section.body]),"Takeaway: "+data.answer.takeaway,"Sources:",...data.sources.map(source=>source.document+", page "+source.page)].join("\n\n");}
-function renderConversation(){const root=$("conversation");root.replaceChildren();$("welcome").hidden=messages.length>0;$("suggestions").hidden=messages.length>0;for(const item of messages){const question=el("div",item.question,"question-bubble"),answer=el("article",undefined,"answer");question.id="message-"+item.id;root.append(question,answer);if(item.state==="pending"){answer.append(el("p","Reading your selected papers and preparing a reply… You can leave this chat and return later.","pending"));continue;}if(item.state==="failed"){const error=el("div",item.error||"This reply could not finish.","answer-error"),retry=el("button","Retry this question ↗","text-button");retry.addEventListener("click",()=>sendQuestion(item.question));error.append(retry);answer.append(error);continue;}if(item.payload)renderAnswer(item.payload,answer);}updateControls();}
+function renderConversation(){
+  const root=$("conversation"),chatId=currentChat?.id||"";
+  let changed=false;
+  if(root.dataset.chatId!==chatId){root.replaceChildren();root.dataset.chatId=chatId;changed=true;}
+  $("welcome").hidden=messages.length>0;$("suggestions").hidden=messages.length>0;
+  for(const [index,item] of messages.entries()){
+    let turn=document.getElementById("turn-"+item.id);
+    if(!turn){turn=el("section",undefined,"chat-turn");turn.id="turn-"+item.id;root.insertBefore(turn,root.children[index]||null);}
+    if(turn.dataset.state===item.state)continue;
+    changed=true;turn.dataset.state=item.state;turn.replaceChildren();
+    const question=el("div",item.question,"question-bubble"),answer=el("article",undefined,"answer");
+    question.id="message-"+item.id;answer.id="reply-"+item.id;turn.append(question,answer);
+    if(item.state==="pending"){answer.append(el("p","Reading your selected papers and preparing a reply…","pending"));continue;}
+    if(item.state==="failed"){
+      const error=el("div",item.error||"This reply could not finish.","answer-error"),retry=el("button","Retry this question ↗","text-button");
+      retry.addEventListener("click",()=>sendQuestion(item.question));error.append(retry);answer.append(error);continue;
+    }
+    if(item.payload)renderAnswer(item.payload,answer);
+  }
+  if(!$("conversation-space")){const space=el("div");space.id="conversation-space";space.setAttribute("aria-hidden","true");root.append(space);}
+  syncChatLayout();updateControls();return changed;
+}
 function renderAnswer(data,container){const answer=data.answer,lookup=new Map(data.sources.map(source=>[source.id,source]));const brand=el("div",undefined,"answer-header");brand.append(el("b","◈"),el("span","PRISM · LET'S MAKE IT CLEAR"));container.append(brand,el("p","Answered using: "+data.documents.map(doc=>doc.title).join(" + "),"reply-sources"),el("h2",answer.title),prose(answer.introduction));for(const section of answer.sections){container.append(el("h3",section.heading),prose(section.body));if(section.source_ids.length){const detail=el("details",undefined,"section-source");detail.append(el("summary","View supporting passages"));for(const id of section.source_ids)if(lookup.has(id))detail.append(makeSource(lookup.get(id)));container.append(detail);}}
 if(data.sources.some(source=>source.kind==="ocr"))container.append(el("p","Some text was read from a photo. Check important names, dates and numbers against the original page.","ocr-note"));
 const gallery=el("div",undefined,"gallery"),seen=new Set();for(const id of answer.figure_source_ids){const source=lookup.get(id);if(!source)continue;for(const url of source.image_urls){if(seen.has(url)||seen.size>=3)continue;seen.add(url);const figure=el("figure",undefined,"figure"),button=el("button"),image=el("img");image.src=url;image.alt="Original page from "+source.document;image.loading="lazy";button.append(image);button.setAttribute("aria-label","Enlarge original paper image");button.addEventListener("click",()=>showImage(url,"Original page from "+source.document));figure.append(button,el("figcaption",source.document+" · click to enlarge"));gallery.append(figure);}}if(seen.size)container.append(gallery);
