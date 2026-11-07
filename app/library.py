@@ -5,6 +5,8 @@ import re
 import sqlite3
 import os
 import threading
+import time
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 import pymupdf as fitz
@@ -17,6 +19,7 @@ IMAGES = DATA_ROOT / "previews"
 MAX_BYTES = int(os.getenv("PRISM_MAX_UPLOAD_MB", "25")) * 1024 * 1024
 MAX_PAGES = 100
 LOCK = threading.RLock()
+PROCESS_SLOTS=threading.BoundedSemaphore(1)
 
 
 def _open_db():
@@ -34,6 +37,9 @@ def _open_db():
             id INTEGER PRIMARY KEY, document_id TEXT, page INTEGER, text TEXT, images TEXT);
         CREATE VIRTUAL TABLE IF NOT EXISTS search USING fts5(text, document_id UNINDEXED, chunk_id UNINDEXED);
     """)
+    for table,column,definition in (("documents","ocr_pages","INTEGER DEFAULT 0"),("documents","processing_note","TEXT"),("chunks","origin","TEXT DEFAULT 'text'")):
+        if column not in {row[1] for row in db.execute("PRAGMA table_info("+table+")")}:
+            db.execute("ALTER TABLE "+table+" ADD COLUMN "+column+" "+definition)
     from app.accounts import schema
     schema(db)
     return db
@@ -88,12 +94,29 @@ def register_pdf(data, name):
 
 
 def process_pdf(document_id):
+    from app import ocr
     IMAGES.mkdir(parents=True, exist_ok=True)
+    acquired=PROCESS_SLOTS.acquire(timeout=30)
     try:
+        if not acquired:
+            raise ValueError("Other PDFs are being prepared. Please try this file again shortly.")
+        deadline=time.monotonic()+ocr.DOCUMENT_SECONDS
         with fitz.open(LIBRARY / (document_id + ".pdf")) as pdf:
-            rows = []
+            rows = [];ocr_pages=0;characters=0
             for index, page in enumerate(pdf):
                 text = page.get_text(sort=True).strip()
+                origin="text"
+                if not text:
+                    ocr_pages+=1
+                    if ocr_pages>ocr.MAX_SCAN_PAGES:
+                        raise ValueError("This PDF has more than 20 scanned pages. Split it into smaller PDFs for OCR.")
+                    with connect() as db:
+                        db.execute("UPDATE documents SET processing_note=? WHERE id=?",(f"Reading photo page {index+1} of {len(pdf)} with OCR",document_id))
+                    text=ocr.read_page(page,deadline)
+                    origin="ocr"
+                characters+=len(text)
+                if characters>2_000_000:
+                    raise ValueError("This PDF contains too much text to prepare safely. Split it into smaller PDFs.")
                 if index == 0 and text:
                     heading = text.splitlines()[0].strip()
                     lines = text.splitlines()
@@ -104,27 +127,46 @@ def process_pdf(document_id):
                             db.execute("UPDATE documents SET title=? WHERE id=?", (heading, document_id))
                 images = []
                 # Render the original page, preserving mixed vector/raster diagrams and tables.
-                if page.get_images() or len(page.get_drawings()) >= 5:
+                if origin=="ocr" or page.get_images() or len(page.get_drawings()) >= 5:
                     filename = f"{document_id}_p{index+1}.jpg"
                     images.append(str(IMAGES / filename))
                 for chunk in chunk_text(text, chunk_size=1800, overlap=250):
-                    rows.append((document_id, index + 1, chunk, json.dumps(images)))
+                    rows.append((document_id, index + 1, chunk, json.dumps(images),origin))
                 with connect() as db:
                     db.execute("UPDATE documents SET progress=?, pages=? WHERE id=?",
                         (round((index+1)/len(pdf)*90), len(pdf), document_id))
             if not rows:
-                raise ValueError("No readable text was found. This PDF needs OCR; please upload a searchable copy.")
+                raise ValueError("OCR found no readable text. Try a clearer, upright photo with good lighting, or upload a searchable PDF.")
             with connect() as db:
                 db.execute("DELETE FROM search WHERE document_id=?", (document_id,))
                 db.execute("DELETE FROM chunks WHERE document_id=?", (document_id,))
                 for row in rows:
-                    cursor = db.execute("INSERT INTO chunks(document_id,page,text,images) VALUES(?,?,?,?)", row)
+                    cursor = db.execute("INSERT INTO chunks(document_id,page,text,images,origin) VALUES(?,?,?,?,?)", row)
                     db.execute("INSERT INTO search(text,document_id,chunk_id) VALUES(?,?,?)", (row[2], document_id, cursor.lastrowid))
-                db.execute("UPDATE documents SET status='ready', progress=100, error=NULL WHERE id=?", (document_id,))
+                db.execute("UPDATE documents SET status='ready', progress=100, error=NULL,processing_note=NULL,ocr_pages=? WHERE id=?", (ocr_pages,document_id))
     except Exception as exc:
         message = str(exc) if isinstance(exc, ValueError) else "Could not prepare this PDF. Try another file."
         with connect() as db:
             db.execute("UPDATE documents SET status='failed',error=? WHERE id=?", (message, document_id))
+        discard_failed(document_id)
+    finally:
+        if acquired:
+            PROCESS_SLOTS.release()
+
+
+def discard_failed(document_id):
+    """Keep a small private error notice, never retain an unusable original."""
+    with LOCK,connect() as db:
+        document=db.execute("SELECT * FROM documents WHERE id=? AND status='failed'",(document_id,)).fetchone()
+        if not document:
+            return
+        owners=db.execute("SELECT user_id,uploaded_name FROM user_documents WHERE document_id=?",(document_id,)).fetchall()
+        db.execute("DELETE FROM upload_notices WHERE expires<?",(time.time(),))
+        for owner in owners:
+            db.execute("INSERT INTO upload_notices VALUES(?,?,?,?,?)",(uuid.uuid4().hex,owner["user_id"],owner["uploaded_name"] or "PDF",document["error"] or "Could not read this PDF.",time.time()+3600))
+            db.execute("DELETE FROM upload_notices WHERE user_id=? AND id NOT IN (SELECT id FROM upload_notices WHERE user_id=? ORDER BY expires DESC LIMIT 10)",(owner["user_id"],owner["user_id"]))
+        db.execute("DELETE FROM user_documents WHERE document_id=?",(document_id,))
+    delete_unreferenced(document_id)
 
 
 STOPWORDS = set("the a an is are was were why how what does do explain me please this that it in of to and for with from can you we about would if happens".split())
@@ -162,7 +204,7 @@ def retrieve(document_id, question, limit=8):
         if json.loads(row["images"]) and sum(bool(c["image_paths"]) for c in chosen) < 3:
             image_paths = [str(preview(document_id, row["page"]))]
         chosen.append({"document_id": document_id, "text": row["text"], "source_file": document["name"], "page_number": row["page"],
-            "page_base": 1, "kind": "text", "image_paths": image_paths, "score": -row["rank"]})
+            "page_base": 1, "kind":row["origin"] or "text", "image_paths": image_paths, "score": -row["rank"]})
         if len(chosen) == limit:
             break
     return chosen

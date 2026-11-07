@@ -28,7 +28,7 @@ def explain(question, sources, level="simple", history=None, generate=generate_w
         return {"title": "Let's find the right material", "introduction": "I couldn't find a relevant passage in this PDF. Try naming a concept from the document or adding a more relevant PDF.",
             "sections": [], "takeaway": "I don't have enough evidence from this document to answer confidently.",
             "figure_source_ids": [], "followups": [], "insufficient_evidence": True}, {"provider":"none", "model":None, "images_seen":0}
-    context = [{"id":s["id"], "document":s.get("document", "PDF"), "text":s["text"], "has_page_image":bool(s.get("image_paths"))} for s in sources]
+    context = [{"id":s["id"], "document":s.get("document", "PDF"), "text":s["text"],"extraction":s.get("kind","text"), "has_page_image":bool(s.get("image_paths"))} for s in sources]
     prompt = """You are a patient, clear teacher helping someone understand their uploaded PDF.
 Answer their actual question directly in the opening. Explain in your own words; never paste whole passages.
 This is an ongoing conversation. Use the recent conversation to resolve follow-ups, pronouns, and confusion.
@@ -49,6 +49,8 @@ Keep source IDs in source_ids metadata only. Every factual section about the doc
 For simple level, introduce intuition first and equations only when helpful. For technical level, include details and assumptions.
 An everyday analogy may help, but explicitly call it an analogy; never imply it is a result from the PDF.
 Use only the provided document evidence for document claims. If missing, say what is missing without inventing an answer.
+Text marked ocr was read from a scanned image and can contain mistakes. Do not silently repair or invent names,
+dates, grades, certificate numbers or other important values. When unclear, say to verify the original page.
 If the question asks whether something is always true, explain the actual conditions and limitations.
 Select figure_source_ids only when an available page image helps explain this question. Images are original PDF pages,
 not generated illustrations or exact figure crops. Do not claim to see images when the provider cannot see them.

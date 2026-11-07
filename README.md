@@ -87,3 +87,10 @@ All chat, PDF, image, note, export and per-chat usage routes check the authentic
 Hardening includes secure HttpOnly SameSite session cookies in production, hashed passwords and session tokens, cross-origin/fetch-metadata checks, bounded JSON/upload bodies, redacted validation errors, private cache headers and a content security policy. Runtime dependency advisories and credential patterns are checked in CI. Production Pillow was upgraded to 13.0.0 after advisory review. The service runs with a dedicated user, no Linux capabilities, read-only application files, restrictive file creation permissions and a 512 MB memory limit.
 
 Keys deliberately pasted into a chat remain in that chat's history; hiding server keys cannot erase that disclosure. Rotate them in the provider dashboards and update the private server environment. Do not expose the development server or reuse the production credentials for local tests. This is a targeted application review, not an independent penetration-test certification.
+
+
+### Mobile chat and photo PDFs
+
+On phones and tablets up to 900 px wide, Prism opens as a chat workspace: a top navigation bar, a slide-out drawer for history/papers/usage, independently scrolling messages, and a bottom composer. Learning demos open separately from the drawer. The supplied diamond logo is also used for the tab icon.
+
+Photo/scanned PDFs use bounded local English OCR when no text layer is available. OCR-derived passages and answers are labelled, with original page images available to verify names, dates and numbers. Clear, upright printed pages work best; handwriting, blur and unsupported languages may fail. Install the native runtime described in `deploy/OPERATIONS.md` for a new server. Failed files are removed and stop using PDF quota; the library displays a private, dismissible error notice.

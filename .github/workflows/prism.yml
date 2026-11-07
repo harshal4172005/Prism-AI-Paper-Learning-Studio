@@ -44,6 +44,8 @@ jobs:
           node-version: '22'
       - name: Install test dependencies
         run: python -m pip install -r requirements-dev.txt
+      - name: Install local OCR runtime for scanned-PDF integration checks
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng
       - name: Check tracked source for credentials and runtime files
         run: python deploy/check_source.py
       - name: Check runtime dependency security advisories

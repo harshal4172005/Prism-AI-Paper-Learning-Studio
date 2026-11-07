@@ -111,6 +111,18 @@ class AccountTests(unittest.TestCase):
         self.assertTrue(all(p["ai"]["vibe_points"]==0 for p in self.two.get("/api/usage").json()["provider_usage"]))
         self.assertNotIn("api_key",json.dumps(first).lower())
 
+    def test_failed_upload_notices_are_private_and_original_is_discarded(self):
+        with patch("app.ocr.read_page",return_value=""):
+            rejected=self.one.post("/api/documents?filename=private-scan.pdf",content=self.pdf_bytes(""))
+        document_id=rejected.json()["document"]["id"]
+        notices=self.one.get("/api/documents").json()["notices"]
+        self.assertEqual(len(notices),1)
+        self.assertEqual(self.two.get("/api/documents").json()["notices"],[])
+        self.two.delete("/api/upload-notices/"+notices[0]["id"])
+        self.assertEqual(len(self.one.get("/api/documents").json()["notices"]),1)
+        self.assertEqual(self.one.get("/api/documents/"+document_id+"/pdf").status_code,404)
+        self.assertEqual(self.one.get("/api/me").json()["usage"]["documents"],0)
+
     def test_prompt_injection_cannot_expand_authenticated_retrieval_scope(self):
         mine=self.upload(self.one,"Attention scaling divides dot products by square root of key dimension.")
         private=self.upload(self.two,"Attention secret marker OTHER_ACCOUNT_PRIVATE_92 not for the first user.")

@@ -44,3 +44,10 @@ Each deployment retains one root-only SQLite snapshot at `/var/lib/prism-learnin
 Users recover accounts with a one-time recovery key saved at signup. Recovery rotates that key and revokes sessions. Email delivery and email verification are not configured. Never send account passwords, recovery keys or API credentials in public issue reports.
 
 For long-term hosting, replace the temporary third-party DNS hostname with a domain you control, update only Prism's virtual host and public-origin setting, issue the replacement certificate, and validate before reloading.
+
+
+## Local scanned-PDF OCR
+
+Install the small native OCR runtime once on a new Ubuntu host: `sudo apt-get install --no-install-recommends tesseract-ocr tesseract-ocr-eng`. The deployed Oracle host has this runtime installed. English printed scans are read locally; extraction makes no external AI request. It uses one preparation job and one OCR CPU thread at a time, at most 20 scanned pages per PDF, a 20-second page timeout and a 90-second OCR budget. Temporary page images are automatically removed.
+
+Unusable PDFs are deleted automatically, including their ownership/index/cache entries. Existing failed uploads are cleaned on application startup. Only a small, private error notice remains for up to one hour (maximum ten notices per account); it is not a PDF and does not use the PDF quota. Valid files still owned by another account are preserved. Users re-upload a clearer/smaller PDF after a rejection. The original operator sample is kept separately.

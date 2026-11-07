@@ -27,6 +27,9 @@ async def lifespan(app):
         db.execute("UPDATE documents SET status='failed',error='Preparation interrupted. Please upload this PDF again.' WHERE status='processing'")
         db.execute("UPDATE messages SET state='failed',error='The server restarted before this reply finished. Please retry.' WHERE state='pending'")
         db.execute("UPDATE chats SET busy_until=0")
+        failed=[row[0] for row in db.execute("SELECT id FROM documents WHERE status='failed'")]
+    for document_id in failed:
+        library.discard_failed(document_id)
     yield
 
 
@@ -155,7 +158,16 @@ def health():
 def documents(user=user_dependency):
     with library.connect() as db:
         rows=db.execute("SELECT d.*,ud.uploaded_name AS private_name FROM documents d JOIN user_documents ud ON ud.document_id=d.id WHERE ud.user_id=? ORDER BY created_at DESC",(user["id"],)).fetchall()
-    return {"documents":[accounts.private_document(row) for row in rows]}
+        db.execute("DELETE FROM upload_notices WHERE expires<?",(time.time(),))
+        notices=[dict(row) for row in db.execute("SELECT id,name,error FROM upload_notices WHERE user_id=? ORDER BY expires DESC LIMIT 10",(user["id"],))]
+    return {"documents":[accounts.private_document(row) for row in rows],"notices":notices}
+
+
+@app.delete("/api/upload-notices/{notice_id}")
+def dismiss_upload_notice(notice_id: str,user=user_dependency):
+    with library.connect() as db:
+        db.execute("DELETE FROM upload_notices WHERE id=? AND user_id=?",(notice_id,user["id"]))
+    return {"ok":True}
 
 
 @app.post("/api/documents",status_code=202)
@@ -425,7 +437,7 @@ def delete_account(body: DeleteAccount,response: Response,user=user_dependency):
         if db.execute("SELECT 1 FROM chats WHERE user_id=? AND busy_until>?",(user["id"],time.time())).fetchone():
             raise HTTPException(409,"Wait for your current replies to finish first.")
         db.execute("DELETE FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE user_id=?)",(user["id"],))
-        for table in ("chats","notes","sessions","user_documents","ai_usage"):
+        for table in ("chats","notes","sessions","user_documents","ai_usage","upload_notices"):
             db.execute("DELETE FROM "+table+" WHERE user_id=?",(user["id"],))
         db.execute("DELETE FROM users WHERE id=?",(user["id"],))
     for row in docs:
