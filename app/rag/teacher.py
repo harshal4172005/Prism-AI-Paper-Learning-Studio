@@ -79,6 +79,10 @@ explanation, source_ids. Do not reveal correct answers in the visible introducti
         for key in ("figure_source_ids","followups","quiz"):
             if data.get(key) is None:
                 data[key]=[]
+        # Some text providers encode a single suggestion/reference as a string.
+        for key in ("figure_source_ids","followups"):
+            if isinstance(data.get(key),str):
+                data[key]=[data[key]] if data[key].strip() else []
         if action=="quiz" and data.get("sections") is None:
             data["sections"]=[]
         # Model-selected lists can exceed presentation limits without invalidating the explanation.

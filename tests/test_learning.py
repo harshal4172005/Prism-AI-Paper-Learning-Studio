@@ -63,6 +63,13 @@ class LibraryTests(unittest.TestCase):
 
 
 class TeacherTests(unittest.TestCase):
+    def test_single_followup_string_from_backup_is_normalized(self):
+        raw={"title":"Explanation","introduction":"An example","sections":[],"takeaway":"The idea",
+             "followups":"Can you show an example?","figure_source_ids":"UNKNOWN"}
+        answer,_=explain("question",self.source(),generate=lambda *a,**kw:(json.dumps(raw),{}))
+        self.assertEqual(answer["followups"],["Can you show an example?"])
+        self.assertEqual(answer["figure_source_ids"],[])
+
     def test_optional_null_fields_do_not_discard_a_valid_quiz(self):
         raw={"title":"Quiz","introduction":"Try these questions","sections":None,"takeaway":"Review your answer",
              "figure_source_ids":None,"followups":None,"check_in":None,

@@ -62,7 +62,7 @@ def _openai_compatible_call(base_url, api_key, model, prompt):
     payload = {"model": model, "messages": [{"role":"system","content":SYSTEM_PROMPT},{"role": "user", "content": prompt}], "max_tokens":4096}
     if "groq.com" in base_url and model.startswith("openai/gpt-oss"):
         payload["reasoning_effort"] = "low"
-    if "groq.com" in base_url and "valid JSON" in prompt:
+    if "valid JSON" in prompt:
         payload["response_format"] = {"type":"json_object"}
     if "nvidia.com" in base_url and "nemotron-3" in model:
         payload["chat_template_kwargs"] = {"enable_thinking":False}
