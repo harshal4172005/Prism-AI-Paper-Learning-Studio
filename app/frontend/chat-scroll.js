@@ -1,5 +1,5 @@
 /* Keep the current question and the beginning of its answer together in view. */
-let followNewReply=false,chatResizeObserver=null,observedTurn=null;
+let followNewReply=false,chatResizeObserver=null,observedTurn=null,chatResizeFrame=0;
 function latestChatTurn(){return document.querySelector("#conversation .chat-turn:last-of-type");}
 function questionFocusTop(question,pane){
   const box=question.getBoundingClientRect();
@@ -54,8 +54,13 @@ function initChatScroll(){
   pane.addEventListener("scroll",showLatestReplyButton,{passive:true});
   document.getElementById("latest-reply").addEventListener("click",()=>{followNewReply=true;focusLatestQuestion();});
   chatResizeObserver=new ResizeObserver(()=>{
-    if(followNewReply)focusLatestQuestion();else measureChatSpace();
-    showLatestReplyButton();
+    if(chatResizeFrame)return;
+    chatResizeFrame=requestAnimationFrame(()=>{
+      chatResizeFrame=0;
+      if(followNewReply)focusLatestQuestion();else measureChatSpace();
+      showLatestReplyButton();
+    });
   });
   chatResizeObserver.observe(pane);
+  chatResizeObserver.observe(document.getElementById("conversation"));
 }
