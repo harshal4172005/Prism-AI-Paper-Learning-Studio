@@ -49,13 +49,13 @@ function initChatScroll(){
   const stopFollowing=()=>{followNewReply=false;};
   pane.addEventListener("wheel",stopFollowing,{passive:true});
   pane.addEventListener("touchmove",stopFollowing,{passive:true});
+  pane.addEventListener("pointerdown",stopFollowing,{passive:true});
   pane.addEventListener("keydown",event=>{if(["ArrowUp","ArrowDown","PageUp","PageDown","Home","End"," "].includes(event.key))stopFollowing();});
-  pane.addEventListener("scroll",()=>{
-    const question=latestChatTurn()?.querySelector(".question-bubble");
-    if(question&&Math.abs(questionFocusTop(question,pane)-pane.getBoundingClientRect().top-12)>100)followNewReply=false;
-    showLatestReplyButton();
-  },{passive:true});
+  pane.addEventListener("scroll",showLatestReplyButton,{passive:true});
   document.getElementById("latest-reply").addEventListener("click",()=>{followNewReply=true;focusLatestQuestion();});
-  chatResizeObserver=new ResizeObserver(()=>{measureChatSpace();showLatestReplyButton();});
+  chatResizeObserver=new ResizeObserver(()=>{
+    if(followNewReply)focusLatestQuestion();else measureChatSpace();
+    showLatestReplyButton();
+  });
   chatResizeObserver.observe(pane);
 }
