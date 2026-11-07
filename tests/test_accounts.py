@@ -54,6 +54,89 @@ class AccountTests(unittest.TestCase):
         anonymous.post("/api/auth/logout")
         self.assertEqual(anonymous.get("/api/me").status_code,401)
 
+    def test_sample_is_optional_private_and_deduplicated(self):
+        sample=Path(self.folder.name)/"sample.pdf"
+        sample.write_bytes(self.pdf_bytes("Attention scaling and softmax: a sample paper."))
+        self.assertEqual(self.one.get("/api/documents").json()["documents"],[])
+        with patch.dict("os.environ",{"PRISM_SAMPLE_PDF":str(sample)}):
+            self.assertEqual(TestClient(app).post("/api/documents/sample").status_code,401)
+            first=self.one.post("/api/documents/sample")
+            self.assertEqual(first.status_code,202,first.text)
+            doc=first.json()["document"]["id"]
+            self.assertEqual(self.two.get(f"/api/documents/{doc}/pdf").status_code,404)
+            self.assertEqual(self.one.post("/api/documents/sample").json()["document"]["id"],doc)
+            self.assertEqual(len(self.one.get("/api/documents").json()["documents"]),1)
+            self.assertEqual(self.two.post("/api/documents/sample").json()["document"]["id"],doc)
+            self.one.delete("/api/documents/"+doc)
+            self.two.delete("/api/documents/"+doc)
+            self.assertTrue(sample.exists())
+            self.assertEqual(self.one.post("/api/documents/sample").status_code,202)
+        with patch.dict("os.environ",{"PRISM_SAMPLE_PDF":str(sample)+"missing"}):
+            missing=self.one.post("/api/documents/sample")
+            self.assertEqual(missing.status_code,503)
+            self.assertNotIn(self.folder.name,missing.text)
+
+    def test_sample_respects_library_quota(self):
+        self.upload(self.one)
+        sample=Path(self.folder.name)/"sample.pdf"
+        sample.write_bytes(self.pdf_bytes("Different sample document."))
+        with patch.dict("os.environ",{"PRISM_SAMPLE_PDF":str(sample),"PRISM_MAX_DOCUMENTS":"1"}):
+            self.assertEqual(self.one.post("/api/documents/sample").status_code,413)
+
+    def test_real_usage_is_private_and_duplicate_requests_are_not_counted(self):
+        from app import usage
+        from datetime import datetime, timezone
+        doc=self.upload(self.one);chat=self.chat(self.one,[doc])
+        before=self.one.get("/api/me").json()["usage"]
+        self.assertEqual(before["questions"]["used"],0)
+        self.assertGreater(before["pdf_bytes"],0)
+        def measured(*args,**kwargs):
+            usage.record("gemini","gemini-2.5-flash",{"promptTokenCount":1000,"candidatesTokenCount":100,"thoughtsTokenCount":50,"totalTokenCount":1150})
+            return ANSWER,TRACE
+        with patch("app.chat_service.explain",side_effect=measured):
+            self.assertEqual(self.send(self.one,chat).status_code,202)
+            self.assertEqual(self.send(self.one,chat).status_code,202)
+        result=self.one.get("/api/usage?chat_id="+chat).json()
+        self.assertEqual(result["questions"]["used"],1)
+        self.assertEqual(result["ai"]["vibe_points"],1150)
+        self.assertEqual(result["chat_ai"]["calls"],1)
+        self.assertAlmostEqual(result["ai"]["estimated_usd"],0.000675)
+        self.assertGreater(datetime.fromisoformat(result["questions"]["reset_at"]),datetime.now(timezone.utc))
+        self.assertEqual(self.two.get("/api/usage").json()["ai"]["vibe_points"],0)
+        self.assertEqual(self.two.get("/api/usage?chat_id="+chat).status_code,404)
+        self.assertEqual(TestClient(app).get("/api/usage").status_code,401)
+        self.one.request("DELETE","/api/account",json={"password":"strong-password-1"})
+        with library.connect() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM ai_usage").fetchone()[0],0)
+
+    def test_usage_survives_answer_format_failure_and_unknown_prices_stay_unknown(self):
+        from app import usage
+        doc=self.upload(self.one);chat=self.chat(self.one,[doc])
+        def malformed(*args,**kwargs):
+            usage.record("groq","unknown-model",{"prompt_tokens":20,"completion_tokens":5,"total_tokens":25})
+            raise ValueError("Could not format answer")
+        with patch("app.chat_service.explain",side_effect=malformed):
+            self.send(self.one,chat)
+        result=self.one.get("/api/usage").json()["ai"]
+        self.assertEqual(result["vibe_points"],25)
+        self.assertEqual(result["unpriced_calls"],1)
+        self.assertIsNone(usage.generation_owner.get())
+
+    def test_gemini_response_metadata_reaches_usage_ledger(self):
+        import io
+        from app import usage
+        from app.rag.generator import _gemini_call
+        body={"candidates":[{"content":{"parts":[{"text":"Answer"}]}}],
+              "usageMetadata":{"promptTokenCount":20,"candidatesTokenCount":5,"totalTokenCount":25}}
+        owner=self.signup["user"]["id"]
+        token=usage.generation_owner.set((owner,"test-chat"))
+        try:
+            with patch("urllib.request.urlopen",return_value=io.BytesIO(json.dumps(body).encode())):
+                self.assertEqual(_gemini_call("gemini-2.5-flash","Question",[]),"Answer")
+        finally:
+            usage.generation_owner.reset(token)
+        self.assertEqual(self.one.get("/api/usage").json()["ai"]["vibe_points"],25)
+
     def test_password_recovery_rotates_key_and_revokes_sessions(self):
         response=self.two.post("/api/auth/recover",json={"email":"one@example.com","recovery_key":self.signup["recovery_key"],"password":"replacement-password"})
         self.assertEqual(response.status_code,200)

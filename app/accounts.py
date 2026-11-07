@@ -23,6 +23,8 @@ def schema(db):
     CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,chat_id TEXT,question TEXT,payload TEXT,state TEXT,error TEXT,request_id TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,UNIQUE(chat_id,request_id));
     CREATE TABLE IF NOT EXISTS notes(id TEXT PRIMARY KEY,user_id TEXT,title TEXT,content TEXT,chat_id TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE IF NOT EXISTS rate_limits(bucket TEXT PRIMARY KEY,count INTEGER,expires REAL);
+    CREATE TABLE IF NOT EXISTS ai_usage(id INTEGER PRIMARY KEY,user_id TEXT,chat_id TEXT,input_points INTEGER,output_points INTEGER,total_points INTEGER,estimated_usd REAL,provider TEXT,model TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    CREATE INDEX IF NOT EXISTS usage_owner ON ai_usage(user_id,chat_id);
     CREATE INDEX IF NOT EXISTS chat_owner ON chats(user_id,updated_at);
     CREATE INDEX IF NOT EXISTS message_chat ON messages(chat_id,created_at);
     CREATE INDEX IF NOT EXISTS session_owner ON sessions(user_id);

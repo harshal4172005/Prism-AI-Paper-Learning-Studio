@@ -67,3 +67,12 @@ Security references: [OWASP password storage](https://cheatsheetseries.owasp.org
 ## CI/CD
 
 GitHub Actions runs 38 Python checks (29 application checks plus nine release/deployment checks) on Python 3.11 and 3.12, numerical lessons, syntax checks and source hygiene. Successful main-branch changes deploy a checksummed artifact to the isolated Oracle service with commit-specific health checks and automatic code rollback on startup failure. See `deploy/CI-CD.md` for access boundaries, retention, database snapshot behavior and operating instructions.
+
+
+### Optional sample and usage
+
+Readers can choose **Use sample paper** to add *Attention Is All You Need* to their private library. It never loads automatically or sends an AI question. The operator supplies the original PDF outside Git and release archives via `PRISM_SAMPLE_PDF` (defaults to `data/samples/attention-is-all-you-need.pdf`). Normal document quotas, deduplication and ownership checks apply.
+
+The sidebar **Usage** panel shows daily request allowance with the local reset time, PDF storage, paper count, and account/per-chat **Vibe Points**. One point is one provider-reported token, including reported thinking. Tracking starts at this release; requests without usage metadata and older replies are not backfilled. A compact SQLite ledger retains usage after deleting a chat and is erased on account deletion. It also records a returned provider response when answer formatting fails.
+
+Cost is a standard paid-tier equivalent, not a bill or user charge. Gemini 2.5 Flash standard text/image rates verified against https://ai.google.dev/gemini-api/docs/pricing on 2026-11-07: $0.30/M uncached input, $0.03/M cached input, $2.50/M output including thinking. Unknown models stay unpriced. This price mapping expires December 1, 2026 because Google advertises automatic model routing from that date; update the mapping when changing models. Browser lessons make no AI calls.

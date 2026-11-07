@@ -7,6 +7,7 @@ from contextlib import ExitStack
 from pathlib import Path
 
 from PIL import Image
+from app.usage import record
 from app.config import GEMINI_API_KEY, GENERATION_MODELS, GROQ_API_KEY, GROQ_MODEL, NVIDIA_API_KEY, NVIDIA_MODEL
 
 REQUEST_TIMEOUT = 30
@@ -47,6 +48,7 @@ def _gemini_call(model_name, prompt, images):
         headers={"x-goog-api-key":GEMINI_API_KEY,"Content-Type":"application/json"})
     with urllib.request.urlopen(request,timeout=REQUEST_TIMEOUT) as response:
         data=json.load(response)
+    record("gemini", data.get("modelVersion") or model_name, data.get("usageMetadata"))
     return "".join(part.get("text","") for part in data["candidates"][0]["content"]["parts"] if not part.get("thought"))
 
 
@@ -55,7 +57,9 @@ def _openai_compatible_call(base_url, api_key, model, prompt):
     request = urllib.request.Request(f"{base_url}/chat/completions", data=body,
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"})
     with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
-        return json.load(response)["choices"][0]["message"]["content"]
+        data = json.load(response)
+    record("groq" if "groq.com" in base_url else "nvidia", model, data.get("usage"))
+    return data["choices"][0]["message"]["content"]
 
 
 def _first_success(attempts):

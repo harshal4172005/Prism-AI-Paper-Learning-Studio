@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import Literal
-from app import accounts, library
+from app import accounts, library, sample_paper, usage
 from app.chat_service import chat_payload, message_payload, complete_message
 
 ROOT=library.ROOT
@@ -109,7 +109,14 @@ def logout(request: Request,response: Response):
 def me(user=user_dependency):
     owned=documents(user)["documents"]
     size=sum((library.LIBRARY/(row["id"]+".pdf")).stat().st_size for row in owned if (library.LIBRARY/(row["id"]+".pdf")).exists())
-    return {"user":user,"usage":{"documents":len(owned),"pdf_mb":round(size/(1024*1024),2)},"limits":{"upload_mb":library.MAX_BYTES//(1024*1024),"documents":int(os.getenv("PRISM_MAX_DOCUMENTS","12")),"storage_mb":int(os.getenv("PRISM_USER_STORAGE_MB","75")),"daily_questions":int(os.getenv("PRISM_DAILY_QUESTIONS","40"))}}
+    return {"user":user,"usage":{"documents":len(owned),"pdf_mb":round(size/(1024*1024),2),"pdf_bytes":size,**usage.snapshot(user["id"])},"limits":{"upload_mb":library.MAX_BYTES//(1024*1024),"documents":int(os.getenv("PRISM_MAX_DOCUMENTS","12")),"storage_mb":int(os.getenv("PRISM_USER_STORAGE_MB","75")),"daily_questions":int(os.getenv("PRISM_DAILY_QUESTIONS","40"))}}
+
+
+@app.get("/api/usage")
+def get_usage(chat_id: str | None=None,user=user_dependency):
+    if chat_id:
+        accounts.owned_chat(user["id"],chat_id)
+    return usage.snapshot(user["id"],chat_id)
 
 
 @app.get("/api/health")
@@ -131,6 +138,10 @@ async def upload(request: Request,background: BackgroundTasks,filename: str="doc
         data.extend(part)
         if len(data)>library.MAX_BYTES:
             raise HTTPException(413,"This PDF exceeds the upload limit.")
+    return register_document(bytes(data),filename,user,background)
+
+
+def register_document(data,filename,user,background):
     with library.LOCK:
         existing=documents(user)["documents"]
         candidate=hashlib.sha256(data).hexdigest()[:24]
@@ -152,6 +163,17 @@ async def upload(request: Request,background: BackgroundTasks,filename: str="doc
     if process:
         background.add_task(library.process_pdf,document_id)
     return {"document":accounts.owned_document(user["id"],document_id)}
+
+
+@app.post("/api/documents/sample",status_code=202)
+def use_sample(background: BackgroundTasks,user=user_dependency):
+    try:
+        with sample_paper.path().open("rb") as file:
+            data=file.read(library.MAX_BYTES+1)
+    except OSError:
+        raise HTTPException(503,"The sample paper is temporarily unavailable. You can still upload your own PDF.") from None
+    return register_document(data,sample_paper.FILENAME,user,background)
+
 
 
 @app.get("/api/documents/{document_id}/pdf")
@@ -375,7 +397,7 @@ def delete_account(body: DeleteAccount,response: Response,user=user_dependency):
         if db.execute("SELECT 1 FROM chats WHERE user_id=? AND busy_until>?",(user["id"],time.time())).fetchone():
             raise HTTPException(409,"Wait for your current replies to finish first.")
         db.execute("DELETE FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE user_id=?)",(user["id"],))
-        for table in ("chats","notes","sessions","user_documents"):
+        for table in ("chats","notes","sessions","user_documents","ai_usage"):
             db.execute("DELETE FROM "+table+" WHERE user_id=?",(user["id"],))
         db.execute("DELETE FROM users WHERE id=?",(user["id"],))
     for row in docs:

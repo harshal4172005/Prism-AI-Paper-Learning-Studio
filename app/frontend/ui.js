@@ -17,3 +17,36 @@ async function refreshNotes(){notebookItems=(await api("/api/notes")).notes;$("n
 async function openNoteEditor(title="",content=""){$("note-id").value="";$("note-title").value=title;$("note-content").value=content;$("note-status").textContent="";await refreshNotes();if(!$("notebook-dialog").open)$("notebook-dialog").showModal();}
 function initNotebook(){$("notebook").addEventListener("click",()=>openNoteEditor().catch(error=>message(error.message,true)));$("new-note").addEventListener("click",()=>{$("note-id").value="";$("note-title").value="";$("note-content").value="";});$("note-form").addEventListener("submit",async event=>{event.preventDefault();try{const id=$("note-id").value;const result=await api("/api/notes"+(id?"/"+id:""),jsonRequest(id?"PATCH":"POST",{title:$("note-title").value,content:$("note-content").value,chat_id:currentChat?.id||null}));if(result.id)$("note-id").value=result.id;await refreshNotes();$("note-status").textContent="Saved to your notebook.";}catch(error){$("note-status").textContent=error.message;}});$("delete-note").addEventListener("click",async()=>{const id=$("note-id").value;if(!id||!confirm("Delete this note?"))return;await api("/api/notes/"+id,{method:"DELETE"});$("new-note").click();await refreshNotes();});}
 function initAccount(){$("account").addEventListener("click",async()=>{const data=await api("/api/me");$("account-details").textContent=userInfo.name+" · "+userInfo.email;$("storage-details").textContent=`Allowance: ${limits.documents} PDFs, ${limits.storage_mb} MB of PDFs, ${limits.daily_questions} AI questions per day, up to 100 chats and 500 saved replies. `+(data.usage?`Currently ${data.usage.documents} PDFs and ${data.usage.pdf_mb} MB.`:"");$("account-status").textContent="";$("account-dialog").showModal();});$("delete-account-form").addEventListener("submit",async event=>{event.preventDefault();if(!confirm("Permanently delete your account, conversations and notebook? This cannot be undone."))return;try{await api("/api/account",jsonRequest("DELETE",{password:$("delete-password").value}));localStorage.removeItem("prism-chat-"+userInfo.id);$("account-dialog").close();showAuth();}catch(error){$("account-status").textContent=error.message;}});}
+function renderUsage(data){
+  usageInfo={...usageInfo,...data};
+  const q=usageInfo.questions,a=usageInfo.ai;
+  if(!q||!a)return;
+  const number=value=>Number(value||0).toLocaleString();
+  $("usage-remaining").textContent=`${q.remaining} of ${q.limit} questions left`;
+  for(const id of ["usage-mini","usage-daily"]){$(id).max=q.limit;$(id).value=q.used;}
+  $("usage-points").textContent=`${number(a.vibe_points)} Vibe Points used`;
+  $("usage-questions").textContent=`${q.used} / ${q.limit} used · ${q.remaining} remaining`;
+  $("usage-reset").textContent="Resets "+new Date(q.reset_at).toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"})+" (your local time).";
+  const mb=(usageInfo.pdf_bytes||0)/1048576;
+  $("usage-storage").textContent=`${mb.toFixed(2)} MB / ${limits.storage_mb} MB`;
+  $("usage-storage-bar").max=limits.storage_mb;$("usage-storage-bar").value=mb;
+  $("usage-documents").textContent=`${usageInfo.documents||0} / ${limits.documents} papers in your library`;
+  $("usage-ai").textContent=`${number(a.vibe_points)} total · ${number(a.input_points)} input / ${number(a.output_points)} output & thinking`;
+  const chat=usageInfo.chat_ai;
+  $("usage-chat").textContent=currentChat&&chat?`This chat: ${number(chat.vibe_points)} Vibe Points · ${chat.calls?"$"+Number(chat.estimated_usd).toFixed(5)+" estimated for priced calls":"no measured calls yet"}`:"Open a conversation to see its usage.";
+  $("usage-cost").textContent=a.calls?`Estimated AI cost: $${Number(a.estimated_usd).toFixed(5)} USD${a.unpriced_calls?` · ${a.unpriced_calls} calls unpriced`:""}`:"Estimated AI cost: no measured calls yet.";
+}
+async function refreshUsage(){
+  if(!userInfo)return;
+  const chatId=currentChat?.id,owner=userInfo.id;
+  try{
+    const [me,detail]=await Promise.all([api("/api/me"),chatId?api("/api/usage?chat_id="+encodeURIComponent(chatId)):Promise.resolve({})]);
+    if(userInfo?.id!==owner||currentChat?.id!==chatId)return;
+    renderUsage({...me.usage,...detail,chat_ai:detail.chat_ai||null});
+    $("usage-status").textContent="";
+  }catch(error){$("usage-status").textContent=error.message;}
+}
+function initUsage(){
+  $("usage-button").addEventListener("click",()=>{$("usage-dialog").showModal();refreshUsage();});
+  $("refresh-usage").addEventListener("click",refreshUsage);
+}

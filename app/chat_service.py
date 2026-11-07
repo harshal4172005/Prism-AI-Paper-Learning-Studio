@@ -4,7 +4,7 @@ import os
 import threading
 import time
 import uuid
-from app import library
+from app import library, usage
 from app.accounts import owned_document
 from app.rag.evidence import prepare_sources
 from app.rag.teacher import explain
@@ -72,7 +72,11 @@ def complete_message(message_id,user_id,document_ids,level,action):
             chunks.extend(matches)
         sources=prepare_sources(chunks[:12])
         started=time.monotonic()
-        answer,trace=explain(message["question"],sources,level,history,action=action,documents=selected)
+        usage_context=usage.generation_owner.set((user_id,chat_id))
+        try:
+            answer,trace=explain(message["question"],sources,level,history,action=action,documents=selected)
+        finally:
+            usage.generation_owner.reset(usage_context)
         result={"answer":answer,"sources":[public_source(source) for source in sources],"documents":selected,
             "document_ids":document_ids,"trace":trace,"elapsed_seconds":round(time.monotonic()-started,2),"action":action}
         with library.connect() as db:
